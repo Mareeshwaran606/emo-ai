@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+  <meta name="theme-color"
+        content="#111827">
+
+  <title>EMO AI</title>
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+
+      display: flex;
+      justify-content: center;
+      align-items: center;
+
+      background: #111827;
+      color: white;
+
+      font-family: Arial, sans-serif;
+    }
+
+    .app {
+      width: 92%;
+      max-width: 420px;
+
+      background: #1f2937;
+
+      padding: 25px;
+
+      border-radius: 25px;
+
+      text-align: center;
+
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 32px;
+    }
+
+    .robot {
+      font-size: 70px;
+      margin: 10px;
+    }
+
+    button {
+      width: 100%;
+
+      padding: 16px;
+
+      margin-top: 15px;
+
+      border: none;
+
+      border-radius: 15px;
+
+      background: #3b82f6;
+
+      color: white;
+
+      font-size: 20px;
+
+      cursor: pointer;
+    }
+
+    button:active {
+      transform: scale(0.97);
+    }
+
+    .box {
+      margin-top: 20px;
+
+      padding: 15px;
+
+      background: #111827;
+
+      border-radius: 15px;
+
+      text-align: left;
+
+      min-height: 70px;
+
+      word-wrap: break-word;
+    }
+
+    .title {
+      font-size: 14px;
+
+      color: #9ca3af;
+
+      margin-bottom: 8px;
+    }
+
+    #status {
+      margin-top: 15px;
+
+      color: #60a5fa;
+
+      font-size: 15px;
+    }
+
+  </style>
+
+</head>
+
+
+<body>
+
+  <div class="app">
+
+    <h1>🤖 EMO AI</h1>
+
+    <div class="robot">
+      🤖
+    </div>
+
+    <button onclick="startVoice()">
+      🎤 Speak
+    </button>
+
+    <div id="status">
+      Ready
+    </div>
+
+
+    <div class="box">
+
+      <div class="title">
+        You said
+      </div>
+
+      <div id="text">
+        Waiting...
+      </div>
+
+    </div>
+
+
+    <div class="box">
+
+      <div class="title">
+        AI Answer
+      </div>
+
+      <div id="answer">
+        Waiting...
+      </div>
+
+    </div>
+
+  </div>
+
+
+<script>
+
+const ESP32_IP = "10.30.47.67";
+
+
+/* =========================
+   START VOICE
+========================= */
+
+function startVoice()
+{
+
+  const SpeechRecognition =
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
+
+
+  if (!SpeechRecognition)
+  {
+
+    document.getElementById("status").innerText =
+      "Speech recognition not supported";
+
+    return;
+
+  }
+
+
+  const recognition =
+    new SpeechRecognition();
+
+
+  recognition.lang = "en-US";
+
+  recognition.continuous = false;
+
+  recognition.interimResults = false;
+
+
+  document.getElementById("status").innerText =
+    "🎤 Listening...";
+
+
+  document.getElementById("text").innerText =
+    "Listening...";
+
+
+  recognition.start();
+
+
+  recognition.onresult =
+    async function(event)
+  {
+
+    const speechText =
+      event.results[0][0].transcript;
+
+
+    document.getElementById("text").innerText =
+      speechText;
+
+
+    document.getElementById("status").innerText =
+      "🤖 Thinking...";
+
+
+    await askAI(speechText);
+
+  };
+
+
+  recognition.onerror =
+    function(event)
+  {
+
+    document.getElementById("status").innerText =
+      "Voice error: " + event.error;
+
+  };
+
+
+  recognition.onend =
+    function()
+  {
+
+    console.log("Voice recognition ended");
+
+  };
+
+}
+
+
+/* =========================
+   ASK AI
+========================= */
+
+async function askAI(question)
+{
+
+  document.getElementById("answer").innerText =
+    "Thinking...";
+
+
+  try
+  {
+
+    const response =
+      await fetch("/api/ask",
+      {
+
+        method: "POST",
+
+        headers:
+        {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify(
+        {
+          question: question
+        })
+
+      });
+
+
+    const data =
+      await response.json();
+
+
+    if (!response.ok)
+    {
+
+      throw new Error(
+        data.error || "AI request failed"
+      );
+
+    }
+
+
+    const answer =
+      data.answer;
+
+
+    document.getElementById("answer").innerText =
+      answer;
+
+
+    document.getElementById("status").innerText =
+      "🔊 Speaking...";
+
+
+    /* PHONE SPEAKER */
+
+    speakAnswer(answer);
+
+
+    /* SEND TO ESP32 */
+
+    await sendToESP32(answer);
+
+
+    document.getElementById("status").innerText =
+      "✅ Done";
+
+  }
+
+
+  catch(error)
+  {
+
+    console.log(error);
+
+
+    document.getElementById("answer").innerText =
+      "AI connection error";
+
+
+    document.getElementById("status").innerText =
+      "❌ Error";
+
+  }
+
+}
+
+
+/* =========================
+   PHONE SPEAKER
+========================= */
+
+function speakAnswer(text)
+{
+
+  if (!("speechSynthesis" in window))
+  {
+
+    console.log(
+      "Phone speech synthesis not supported"
+    );
+
+    return;
+
+  }
+
+
+  window.speechSynthesis.cancel();
+
+
+  const speech =
+    new SpeechSynthesisUtterance(text);
+
+
+  speech.lang = "en-US";
+
+
+  speech.rate = 0.9;
+
+
+  speech.pitch = 1.15;
+
+
+  speech.volume = 1.0;
+
+
+  window.speechSynthesis.speak(speech);
+
+}
+
+
+/* =========================
+   SEND ANSWER TO ESP32
+========================= */
+
+async function sendToESP32(answer)
+{
+
+  console.log(
+    "Sending answer to ESP32..."
+  );
+
+
+  try
+  {
+
+    const response =
+      await fetch(
+        "http://" + ESP32_IP + "/answer",
+        {
+
+          method: "POST",
+
+          headers:
+          {
+            "Content-Type": "text/plain"
+          },
+
+          body: answer
+
+        }
+      );
+
+
+    const result =
+      await response.text();
+
+
+    console.log(
+      "ESP32 response:",
+      result
+    );
+
+  }
+
+
+  catch(error)
+  {
+
+    console.log(
+      "ESP32 connection error:",
+      error
+    );
+
+  }
+
+}
+
+</script>
+
+</body>
+
+</html>
