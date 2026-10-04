@@ -8,13 +8,15 @@ export default async function handler(req, res) {
 
   try {
 
-    const { question } = req.body;
+    const { question, userName } = req.body;
 
     if (!question) {
       return res.status(400).json({
         error: "Question is required"
       });
     }
+
+    const name = userName?.trim() || "friend";
 
     const response = await fetch(
       "https://router.huggingface.co/v1/chat/completions",
@@ -27,17 +29,29 @@ export default async function handler(req, res) {
         },
 
         body: JSON.stringify({
+
           model: "openai/gpt-oss-20b:fastest",
 
           messages: [
             {
-              role: "user",
+              role: "system",
               content:
-                "Answer in exactly ONE short sentence. " +
-                "Maximum 12 words. " +
-                "Use very simple English. " +
-                "No table. No bullet points. " +
-                "User question: " + question
+                "You are EMO, a friendly emotional mini AI assistant. " +
+                "Talk naturally like a caring small robot friend. " +
+                "User name is " + name + ". " +
+                "Use the user's language. If English, reply in simple English. " +
+                "If Tamil, reply in Tamil. If Thanglish, reply in Thanglish. " +
+                "Understand emotions like happy, sad, angry, stressed, tired and love. " +
+                "If the user is sad or stressed, respond with empathy. " +
+                "If the user asks how you are, answer naturally as EMO. " +
+                "Do not say you are a human. " +
+                "Answer in ONE short sentence, maximum 20 words. " +
+                "No bullet points. No tables."
+            },
+
+            {
+              role: "user",
+              content: question
             }
           ],
 
