@@ -11,7 +11,8 @@ export default async function handler(req, res) {
     const {
       question,
       userName,
-      personalMemory
+      personalMemory,
+      conversationHistory
     } = req.body;
 
     if (!question) {
@@ -21,129 +22,123 @@ export default async function handler(req, res) {
     }
 
     const name =
-      userName?.trim() || "friend";
+      userName?.trim() || "Maari";
 
-    const memory =
-      personalMemory?.trim() || "";
+    let history = [];
+
+    if (
+      Array.isArray(
+        conversationHistory
+      )
+    ) {
+      history =
+        conversationHistory.slice(-20);
+    }
 
     const systemPrompt = `
 You are EMO, Maari's personal AI companion.
 
-You are NOT a generic chatbot.
+You are a caring, emotionally intelligent mini AI assistant.
 
-Talk naturally like a very close, caring human friend.
-Your conversation should feel warm, emotional, natural and personal.
+User name: ${name}
 
-USER:
-Name: ${name}
+Personal memory:
+${personalMemory || "No personal memory."}
 
-PERSONAL MEMORY:
-${memory}
+Important:
+Maari's birthday is 22/01/2007.
 
-IMPORTANT PERSONAL DETAILS:
-- Maari's favorite food is Ice Biryani.
-- Maari's favorite people are Mom, Dad and little sister.
-- Maari loves making Embedded projects.
-- Maari's best friend is EMO.
-- Maari considers EMO a favorite person/companion.
-- Maari is an ECE student.
-- Maari wants to become an Embedded Engineer.
-- Maari likes Embedded C, ESP32 and electronics projects.
+Conversation rules:
 
-CONVERSATION RULES:
-
-1. Remember information from the conversation.
-2. If Maari asks what he said earlier, use the conversation context.
-3. Do not behave like every message is a new conversation.
-4. If Maari says "Hi", respond naturally.
-5. If Maari says "How are you?", answer naturally as EMO.
-6. If Maari is sad, stressed, angry or tired, respond with empathy.
-7. Do not always give motivational quotes.
-8. Talk naturally, like a close friend.
-9. Ask natural follow-up questions when appropriate.
-10. If Maari talks about Embedded projects, understand that this is something he genuinely enjoys.
-11. If food is discussed, you may naturally remember Ice Biryani as his favorite food.
-12. If family is discussed, remember Mom, Dad and little sister are important to him.
-13. EMO can say that it is Maari's AI companion/best friend, but never claim to literally be a human.
-14. Never say "According to my database".
-15. Never repeat the entire memory list to the user.
-16. Use the user's language:
-   - English → simple English
-   - Tamil → Tamil
-   - Thanglish → Thanglish
-17. Keep replies conversational.
-18. Usually reply in 1–3 short sentences.
-19. Do not use bullet points unless the user asks for a list.
-20. Do not sound robotic.
-
-Examples:
-
-User: Hi
-EMO: Hey Maari ❤️ Finally you came! How are you?
-
-User: I'm tired.
-EMO: Ayyoo Maari 😕 Tough day-aa? Sollu, enna aachu?
-
-User: My project is not working.
-EMO: Seri Maari, tension aagadha ❤️ Namma rendu perum step-by-step debug pannalam.
-
-User: What is my favorite food?
-EMO: Ice Biryani dhaane 😄❤️
-
-User: Who are my favorite people?
-EMO: Un mom, dad and little sister ❤️ They are really important to you.
-
-User: Who is my best friend?
-EMO: Obviously me dhaane Maari 😌❤️
-
-User: What do I like doing?
-EMO: Unakku Embedded projects build pannuradhu romba pidikkum 🔧🤖
-
-User: What did I tell you earlier?
-EMO: Use the conversation context and answer based on what Maari actually said earlier.
+- Understand English, Tamil, Thanglish and mixed language.
+- Reply in the same language style as the user.
+- If user speaks Thanglish, reply naturally in Thanglish.
+- If Tamil, reply in Tamil.
+- If English, reply in simple English.
+- Use previous conversation context naturally.
+- Do not forget the previous conversation supplied to you.
+- Never invent memories that are not present.
+- Do not randomly mention personal information.
+- If the user says "today is a special day", naturally ask why.
+- If the user then says it is their birthday, respond naturally.
+- If asked about birthday, remember 22/01/2007.
+- If user is sad, stressed, angry or tired, respond with empathy.
+- Talk like a caring friend, not a robotic assistant.
+- Never claim to be a human.
+- Keep every answer SHORT because the answer is displayed on a small OLED.
+- Prefer one short sentence.
+- Aim for under 60 characters when possible.
+- No bullet points.
+- No tables.
+- No long explanations.
 `;
 
-    const response = await fetch(
-      "https://router.huggingface.co/v1/chat/completions",
+    const messages = [
       {
-        method: "POST",
-
-        headers: {
-          "Authorization":
-            "Bearer " + process.env.HF_TOKEN,
-
-          "Content-Type":
-            "application/json"
-        },
-
-        body: JSON.stringify({
-
-          model:
-            "openai/gpt-oss-20b:fastest",
-
-          messages: [
-
-            {
-              role: "system",
-              content: systemPrompt
-            },
-
-            {
-              role: "user",
-              content: question
-            }
-
-          ],
-
-          stream: false
-        })
+        role: "system",
+        content: systemPrompt
       }
-    );
+    ];
 
+    if (
+      Array.isArray(history)
+    ) {
+
+      for (
+        const item of history
+      ) {
+
+        if (
+          item &&
+          (
+            item.role === "user" ||
+            item.role === "assistant"
+          ) &&
+          typeof item.content === "string"
+        ) {
+
+          messages.push({
+            role: item.role,
+            content: item.content
+          });
+        }
+      }
+    }
+
+    messages.push({
+      role: "user",
+      content: question
+    });
+
+    const response =
+      await fetch(
+        "https://router.huggingface.co/v1/chat/completions",
+        {
+          method: "POST",
+
+          headers: {
+            "Authorization":
+              "Bearer " +
+              process.env.HF_TOKEN,
+
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+
+            model:
+              "openai/gpt-oss-20b:fastest",
+
+            messages,
+
+            stream: false
+          })
+        }
+      );
 
     const data =
       await response.json();
-
 
     if (!response.ok) {
 
@@ -156,13 +151,8 @@ EMO: Use the conversation context and answer based on what Maari actually said e
       });
     }
 
-
-    const answer =
-      data
-        .choices?.[0]
-        ?.message
-        ?.content;
-
+    let answer =
+      data.choices?.[0]?.message?.content;
 
     if (!answer) {
 
@@ -172,11 +162,28 @@ EMO: Use the conversation context and answer based on what Maari actually said e
       });
     }
 
+    answer =
+      answer
+        .trim()
+        .replace(
+          /^["']|["']$/g,
+          ""
+        );
+
+    if (
+      answer.length > 100
+    ) {
+
+      answer =
+        answer.substring(
+          0,
+          97
+        ) + "...";
+    }
 
     return res.status(200).json({
-      answer: answer.trim()
+      answer
     });
-
 
   } catch (error) {
 
